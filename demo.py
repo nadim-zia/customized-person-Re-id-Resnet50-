@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # Evaluate
 parser = argparse.ArgumentParser(description='Demo')
 parser.add_argument('--query_index', default=777, type=int, help='test_image_index')
-parser.add_argument('--test_dir',default='../Market/pytorch',type=str, help='./test_data')
+parser.add_argument('--test_dir',default='Market1501/pytorch',type=str, help='./test_data')
 opts = parser.parse_args()
 
 data_dir = opts.test_dir

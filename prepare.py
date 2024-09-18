@@ -1,8 +1,8 @@
 import os
 from shutil import copyfile
 
-download_path = '../Market' # Please not change.
-download_path2 = '../Market-1501-v15.09.15' # You only need to change this line to your dataset download path
+download_path = 'Market1501' # Please not change.
+download_path2 = 'Market1501' # You only need to change this line to your dataset download path
 
 if not os.path.isdir(download_path):
     if os.path.isdir(download_path2):
