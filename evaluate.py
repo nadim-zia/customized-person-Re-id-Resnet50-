@@ -102,4 +102,5 @@ if multi:
             print(f"Error evaluating multi-query {i}: {e}")
     CMC = CMC.float()
     CMC = CMC / len(query_label)  # Average CMC
+    print ("Every thing done\n")
     print('multi Rank@1:%f Rank@5:%f Rank@10:%f mAP:%f' % (CMC[0], CMC[4], CMC[9], ap / len(query_label)))
