@@ -367,14 +367,14 @@ import scipy.io
 import yaml
 import math
 from tqdm import tqdm
-from model import ft_net
+from model import ft_net, ft_net_dense
 from utils import fuse_all_conv_bn
 # Options
 parser = argparse.ArgumentParser(description='Test')
 parser.add_argument('--gpu_ids', default='0', type=str, help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--which_epoch', default='last', type=str, help='0,1,2,3...or last')
 parser.add_argument('--test_dir', default='Market1501/pytorch', type=str, help='./test_data')
-parser.add_argument('--name', default='ft_ResNet50', type=str, help='save model path')
+parser.add_argument('--name', default='ft_net_dense', type=str, help='save model path')
 parser.add_argument('--batchsize', default=256, type=int, help='batchsize')
 parser.add_argument('--linear_num', default=751, type=int, help='feature dimension: 512 or default or 0 (linear=False)')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121')
@@ -612,14 +612,14 @@ if __name__ == '__main__':
     # if opt.PCB: 
     #     model_structure = PCB(opt.nclasses)
     # else:
-    #     if opt.use_dense:
-    #         model_structure = ft_net_dense(opt.nclasses, opt.stride)
+    if opt.use_dense:
+            model_structure = ft_net_dense(opt.nclasses,opt.droprate, opt.stride)
         # elif opt.use_hr:
         #     model_structure = ft_net_hr(opt.nclasses)
         # elif opt.use_efficient:
-        #     model_structure = ft_net_efficient(opt.nclasses)
-        # else:
-    model_structure = ft_net(opt.nclasses, opt.droprate, opt.stride)
+        #     model_structure = ft_net_efficient(opt.nclasses)  
+    else:
+          model_structure = ft_net(opt.nclasses, opt.droprate, opt.stride)
 
     model = load_network(model_structure)
     model = model.to(device)                                          
