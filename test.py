@@ -656,7 +656,7 @@ if __name__ == '__main__':
 
     print(opt.name)
     result = './model/%s/result.txt' % opt.name
-    os.system('python evaluate.py | tee -a %s' % result)
+    # os.system('python evaluate.py | tee -a %s' % result)
 
     if opt.multi:
         multi_query_result = {

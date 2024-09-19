@@ -28,12 +28,12 @@ from ODFA import ODFA
 from utils import save_network
 version =  torch.__version__
 #fp16
-try:
-    from apex.fp16_utils import *
-    from apex import amp
-    from apex.optimizers import FusedSGD
-except ImportError: # will be 3.x series
-    print('This is not an error. If you want to use low precision, i.e., fp16, please install the apex with cuda support (https://github.com/NVIDIA/apex) and update pytorch to 1.0')
+# try:
+#     from apex.fp16_utils import *
+#     from apex import amp
+#     from apex.optimizers import FusedSGD
+# except ImportError: # will be 3.x series
+print('This is not an error. If you want to use low precision, i.e., fp16, please install the apex with cuda support (https://github.com/NVIDIA/apex) and update pytorch to 1.0')
 
 from pytorch_metric_learning import losses, miners #pip install pytorch-metric-learning
 
@@ -86,7 +86,7 @@ parser.add_argument('--aiter', default=10, type=float, help='use adv loss with i
 
 opt = parser.parse_args()
 
-fp16 = opt.fp16
+# fp16 = opt.fp16
 data_dir = opt.data_dir
 name = opt.name
 str_ids = opt.gpu_ids.split(',')
