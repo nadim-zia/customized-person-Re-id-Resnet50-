@@ -20,7 +20,7 @@ import torch
 import scipy.io
 import argparse
 
-from utils import load_pickle, evaluate_ranking_list
+from utils_1 import load_pickle, evaluate_ranking_list
 from gnn_reranking import gnn_reranking
 
 parser = argparse.ArgumentParser(description='Reranking_is_GNN')

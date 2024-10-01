@@ -18,7 +18,7 @@ import scipy.io
 import yaml
 import math
 from model import ft_net, ft_net_dense, ft_net_hr, ft_net_swin, ft_net_swinv2, ft_net_efficient, ft_net_NAS, ft_net_convnext, PCB, PCB_test
-from utils import fuse_all_conv_bn
+from utils_1 import fuse_all_conv_bn
 #fp16
 try:
     from apex.fp16_utils import *

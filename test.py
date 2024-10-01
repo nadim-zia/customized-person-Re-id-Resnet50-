@@ -447,7 +447,7 @@ else:
     image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms) for x in ['gallery', 'query']}
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize, shuffle=False, num_workers=4) for x in ['gallery', 'query']}
 
-class_names = image_datasets['query'].classes
+ 
 
 # # # Load model
 # def load_network(network):
@@ -476,26 +476,26 @@ def load_network(network):
     else:
         pretrained_architecture = 'Unknown architecture'
     
-    print(f"Pretrained model architecture: {pretrained_architecture}")
+    # print(f"Pretrained model architecture: {pretrained_architecture}")
     
     # Print the keys of the pretrained state dictionary in a single line
-    print("Pretrained state_dict keys:")
-    print(", ".join(pretrained_state_dict.keys()))  # Print keys in a single line
+    # print("Pretrained state_dict keys:")
+    # print(", ".join(pretrained_state_dict.keys()))  # Print keys in a single line
     
     # Print the total number of keys in the pretrained state dictionary
-    print(f"Number of keys in pretrained state_dict: {len(pretrained_state_dict.keys())}")
+    # print(f"Number of keys in pretrained state_dict: {len(pretrained_state_dict.keys())}")
     
     # Print the architecture name of the current model
     current_model_architecture = network.__class__.__name__
-    print(f"Current model architecture: {current_model_architecture}")
+    # print(f"Current model architecture: {current_model_architecture}")
     
     # Print the keys of the model's state dictionary before loading in a single line
-    print("Model state_dict keys before loading:")
+    # print("Model state_dict keys before loading:")
     model_state_dict = network.state_dict()
-    print(", ".join(model_state_dict.keys()))  # Print keys in a single line
+    # print(", ".join(model_state_dict.keys()))  # Print keys in a single line
     
     # Print the total number of keys in the model's state dictionary before loading
-    print(f"Number of keys in model state_dict before loading: {len(model_state_dict.keys())}")
+    # print(f"Number of keys in model state_dict before loading: {len(model_state_dict.keys())}")
     
     # Filter out keys starting with 'classifier'
     filtered_state_dict = {k: v for k, v in pretrained_state_dict.items() if not k.startswith('classifier')}
@@ -504,12 +504,12 @@ def load_network(network):
     network.load_state_dict(filtered_state_dict, strict=False)
     
     # Print the keys of the model's state dictionary after loading in a single line
-    print("Model state_dict keys after loading:")
+    # print("Model state_dict keys after loading:")
     model_state_dict = network.state_dict()
-    print(", ".join(model_state_dict.keys()))  # Print keys in a single line
+    # print(", ".join(model_state_dict.keys()))  # Print keys in a single line
     
     # Print the total number of keys in the model's state dictionary after loading
-    print(f"Number of keys in model state_dict after loading: {len(model_state_dict.keys())}")
+    # print(f"Number of keys in model state_dict after loading: {len(model_state_dict.keys())}")
     
     return network
 
@@ -523,7 +523,7 @@ def fliplr(img):
     return img_flip
 
 
-def extract_feature(model, dataloaders):
+def extract_feature(model, dataloaders, opt):
     pbar = tqdm()
     ms = [math.sqrt(float(s)) for s in opt.ms.split(',')]
 
@@ -581,6 +581,49 @@ def extract_feature(model, dataloaders):
     print(f'Processed features for {end} images')
     return features
 
+
+def extract_feature_single_image(model, img, opt):
+    # Define the transformation pipeline
+    transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((256, 128)),  # Resize to match the input size of your model
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),  # Normalize
+    ])
+
+    # Apply transformation
+    img_tensor = transform(img).unsqueeze(0)  # Add batch dimension
+
+    # Prepare multi-scale transformations if applicable
+    ms = [math.sqrt(float(s)) for s in opt.ms.split(',')]
+    n, c, h, w = img_tensor.size()
+    ff = torch.FloatTensor(1, opt.linear_num).zero_()
+
+    if opt.PCB:
+        ff = torch.FloatTensor(1, 2048, 6).zero_()
+
+    for i in range(2):
+        if i == 1:
+            img_tensor = fliplr(img_tensor)
+        input_img = img_tensor
+        for scale in ms:
+            if scale != 1:
+                # Resize the image with bicubic interpolation for multi-scale inputs
+                input_img = nn.functional.interpolate(input_img, scale_factor=scale, mode='bicubic', align_corners=False)
+            with torch.no_grad():
+                outputs = model(input_img)
+                ff += outputs
+
+    # Normalize features
+    if opt.PCB:
+        fnorm = torch.norm(ff, p=2, dim=1, keepdim=True) * np.sqrt(6)
+        ff = ff.div(fnorm.expand_as(ff))
+        ff = ff.view(ff.size(0), -1)  # Flatten features
+    else:
+        fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)
+        ff = ff.div(fnorm.expand_as(ff))
+
+    return ff.cpu().numpy()  # Return as a NumPy array for easier manipulation
 
 def get_id(img_path):
     camera_id = []

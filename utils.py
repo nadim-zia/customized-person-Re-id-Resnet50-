@@ -1,4 +1,6 @@
+from ast import List
 import os
+from typing import OrderedDict
 import torch
 import torch.nn as nn
 from torch.nn.utils import fuse_conv_bn_eval
@@ -63,7 +65,7 @@ def save_network(network, dirname, epoch_label, local_rank=-1):
         network.cuda()
 
 
-def load_state_dict_mute(self, state_dict: 'OrderedDict[str, Tensor]',
+def load_state_dict_mute(self, state_dict: 'OrderedDict[str, torch.Tensor]',
                         strict: bool = True):
         r"""Copies parameters and buffers from :attr:`state_dict` into
         this module and its descendants. If :attr:`strict` is ``True``, then
