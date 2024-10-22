@@ -1,33 +1,53 @@
-import cv2
 import os
-import numpy as np
-
-from torchvision import datasets, models, transforms
-import torch
-from scipy.spatial.distance import cosine
-       
 import sys
-from model import ft_net, ft_net_dense
+import cv2
+import torch
+import random
 
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-from test import opt,load_network,extract_feature,extract_feature_single_image
+import numpy as np
+from scipy.spatial.distance import cosine
+from torchvision import datasets, transforms
+import warnings
 
+seed = 42  # You can choose any seed value
+torch.manual_seed(seed)
+np.random.seed(seed)
+random.seed(seed)
+
+
+
+
+
+# Suppress specific FutureWarnings 
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+
+# Import custom modules
+from test import opt, load_network, extract_feature_single_image
+from model import ft_net_dense
 sys.path.append(r'C:\Users\123\Desktop\datasets\Person_reID_baseline_pytorch\sort')
 from sort import Sort  # Import the SORT tracking class
 
-# Load YOLOv5 model
-# model_structure = ft_net(opt.nclasses, opt.droprate, opt.stride)
+# Global paths
+video_path = r'C:/Users/123/Desktop/datasets/xyz/New folder/hazlah-abassi-left-cam2_LloiteMe.mp4'
+output_video_path = r'C:/Users/123/Desktop/datasets/Person_reID_baseline_pytorch/annotated_output.mp4'
+gallery_folder = r'C:\Users\123\Desktop\datasets\Person_reID_baseline_pytorch\Market1501\pytorch\gallery'
+embeddings_file = r'C:\Users\123\Desktop\datasets\Person_reID_baseline_pytorch\gallery_embeddings.pth'  # Single .pth file for embeddings
+names_file = r'C:\Users\123\Desktop\datasets\Person_reID_baseline_pytorch\names.npy'  # Separate .npy file for names
+
+# Add flag for updating gallery embeddings
+update_gallery = False
 
 def load_yolov5():
-    # Remove local 'utils' module if it exists in sys.modules to avoid conflict
+    """Loads YOLOv5 model from torch hub."""
     if 'utils' in sys.modules:
         del sys.modules['utils']
 
-    # Load YOLOv5 model from torch.hub
     model = torch.hub.load('ultralytics/yolov5:v6.2', 'yolov5s')  # Load YOLOv5 small model
     return model
-# Function to detect persons in the frame
+
 def detect_persons(frame, model):
+    """Detects persons in a given frame using the provided YOLOv5 model."""
     results = model(frame)
     detections = results.xyxy[0].numpy()  # Get detections as a NumPy array
     boxes = []
@@ -37,129 +57,211 @@ def detect_persons(frame, model):
             boxes.append((x1, y1, x2, y2, conf))  # Add confidence score
     return boxes
 
-# Define the path to the input video file
-video_path = r'C:/Users/123/Desktop/datasets/xyz/New folder/hazlah-abassi-left-cam2_LloiteMe.mp4'
-output_video_path = r'C:/Users/123/Desktop/datasets/Person_reID_baseline_pytorch/annotated_output.mp4'
+def precompute_gallery_embeddings(gallery_folder, reid_model):
+    """Precomputes and returns embeddings for the gallery images and saves them to a .pth file."""
+    gallery_embeddings = {}
+    for person_name in os.listdir(gallery_folder):
+        person_folder = os.path.join(gallery_folder, person_name)
+        if os.path.isdir(person_folder):
+            embeddings = []  # To store embeddings for each image of the person
+            for img_file in os.listdir(person_folder):
+                img_path = os.path.join(person_folder, img_file)
+                img = cv2.imread(img_path)
+                if img is not None:
+                    embedding = extract_feature_single_image(reid_model, img, opt)  # Using single image extraction
+                    embeddings.append(embedding)
 
-data_dir = r'C:\Users\123\Desktop\datasets\Person_reID_baseline_pytorch\Market1501\pytorch'
+            # Store the average embedding for the person (or use another method to combine them)
+            if embeddings:
+                gallery_embeddings[person_name] = np.mean(embeddings, axis=0)  # Average embedding
 
-gallery_folder = r'C:\Users\123\Desktop\datasets\Person_reID_baseline_pytorch\Market1501\pytorch\gallery'
-h, w = 256, 128
-data_transforms = transforms.Compose([
-    transforms.Resize((h, w), interpolation=3),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-])
-    
-image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms) for x in ['gallery']}
-dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize, shuffle=False, num_workers=4) for x in ['gallery']}
+    # Check names and embeddings before saving
+    names_before_saving = list(gallery_embeddings.keys())
+    embeddings_before_saving = {name: gallery_embeddings[name] for name in names_before_saving}
 
-# Load YOLOv5 model
-model = load_yolov5()
+    # Save all computed embeddings to a single .pth file
+    torch.save(gallery_embeddings, embeddings_file) 
 
-# Initialize SORT tracker
-tracker = Sort() 
-reid_model_structure = ft_net_dense(opt.nclasses, opt.droprate, opt.stride)
-reid_model = load_network(reid_model_structure)
-reid_model.eval()
-def precompute_gallery_embeddings(gallery_folder,reid_model):
-        gallery_embeddings = {}
-        
-        for person_name in os.listdir(gallery_folder):
-            person_folder = os.path.join(gallery_folder, person_name)
-            
-            if os.path.isdir(person_folder):
-                embeddings = []  # To store embeddings for each image of the person
-                for img_file in os.listdir(person_folder):
-                    img_path = os.path.join(person_folder, img_file)
-                    img = cv2.imread(img_path)
-                    
-                    # Compute feature extraction for each gallery image
-                    if img is not None:
-                        embedding = extract_feature_single_image(reid_model, img, opt)  # Using single image extraction
-                        embeddings.append(embedding)
+    # Save names to a separate .npy file
+    np.save(names_file, names_before_saving)
 
-                # Store the average embedding for the person (or use another method to combine them)
-                if embeddings:
-                    gallery_embeddings[person_name] = np.mean(embeddings, axis=0)  # Average embedding
+    print("Gallery embeddings have been precomputed and saved.")
 
-        return gallery_embeddings
-gallery_embeddings=precompute_gallery_embeddings(gallery_folder,reid_model)
+    return gallery_embeddings
+ 
+# def load_gallery_embeddings():
+#     """Loads precomputed gallery embeddings from the .pth file. If none are found, recomputes them."""
+#     if os.path.exists(embeddings_file):
+#         gallery_embeddings = torch.load(embeddings_file)
+#         print(f"Loaded {len(gallery_embeddings)} gallery embeddings from {embeddings_file}.")
+#         return gallery_embeddings
+#     else:
+#         print("No precomputed embeddings found. Recomputing gallery embeddings.")
+#         return None
+
+def verify_embeddings_and_names(names_before, embeddings_before, loaded_gallery_embeddings):
+    """Compares names and embeddings before saving and after loading, and prints the results."""
+    loaded_names = sorted(loaded_gallery_embeddings.keys())
+
+    # Check if names match
+    if sorted(names_before) != loaded_names:
+        print("Names do not match between before saving and after loading.")
+    else:
+        print("Names match between before saving and after loading.")
+
+    # Check if embeddings match
+    for name in names_before:
+        if not np.array_equal(embeddings_before[name], loaded_gallery_embeddings[name]):
+            print(f"Embeddings for {name} do not match.")
+        else:
+            print(f"Embeddings for {name} match.")
+def l2_normalize(array):
+    norm = np.linalg.norm(array, ord=2)
+    return array / norm if norm > 0 else array
+
+# Normalize qemb and gemb
 
 
 def find_closest_match(query_embedding, gallery_embeddings, threshold=0.5):
-        best_match_name = None
-        best_distance = float('inf')
-    
-        for name, gallery_embedding in gallery_embeddings.items():
-            # Compute similarity (using cosine distance)
-            distance = cosine(query_embedding.flatten(), gallery_embedding.flatten())
+    """Finds and returns the closest match name for a given query embedding."""
+    best_match_name = None
+    best_distance = float('inf')
+
+    # Flatten and truncate the query embedding to the first 50 elements
+    qemb = query_embedding.flatten()
+    qemb_normalized = l2_normalize(qemb)
+
+    for name, gallery_embedding in gallery_embeddings.items():
+        # Flatten and truncate the gallery embedding to the first 50 elements
+        gemb = gallery_embedding.flatten()
+        gemb_normalized = l2_normalize(gemb)
 
 
-            # Check if distance is below the threshold and update the best match
-            if distance < best_distance and distance < threshold:
-                best_match_name = name
-                best_distance = distance
+        # Print embeddings for the current iteration
+        # print(f"Processing {name}:")
+        # print(f"Query embedding (first 50 elements): {qemb}")
+        # print(f"Gallery embedding for {name} (first 50 elements): {gemb}")
+        # print(f"Gallery embedding without name specified (first 50 elements): {gemb}")
 
-        return best_match_name
+        print()  # Empty line for better readability
 
- 
-# Open the video file
-cap = cv2.VideoCapture(video_path)
+        # Calculate distance using the embeddings
+# Check shape
+        print("qemb shape:", qemb.shape)
+        print("gemb shape:", gemb.shape)
 
-# Get video properties for output video
-frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-fps = int(cap.get(cv2.CAP_PROP_FPS))
+        # Check type
+        print("qemb type:", type(qemb))
+        print("gemb type:", type(gemb))
 
-# Define the video writer to save annotated video
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for the output video
-out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
+        # Check size
+        print("qemb size:", qemb.size)  # Use .size for NumPy arrays
+        print("gemb size:", gemb.size)   # Use .size for NumPy arrays
+        distance = cosine(qemb_normalized, gemb_normalized)
 
-frame_count = 0
+        # Check for the best match within the threshold
+        if distance < best_distance and distance < threshold:
+            best_match_name = name
+            best_distance = distance
+            print(f"Distance between {best_match_name} and query: {distance}")
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
 
-    # Detect persons in the frame
-    detections = detect_persons(frame, model)
+    return best_match_name
 
-    # Format detections for SORT (x1, y1, x2, y2, score)
-    detections_for_sort = np.array(detections)
-    
-    # Update tracker
-    tracked_objects = tracker.update(detections_for_sort)
+def process_video(video_path, output_video_path, model, reid_model, gallery_embeddings):
+    """Processes the video frame-by-frame, performs detection, tracking, and annotation."""
+    cap = cv2.VideoCapture(video_path)
 
-    
-    for tracked in tracked_objects:
-        x1, y1, x2, y2, track_id = map(int, tracked)  # Extract bounding box and ID
+    # Get video properties for output video
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    frames_to_process = 30 * fps
 
-        # Crop the detected person from the frame
-        person_crop = frame[y1:y2, x1:x2]
+    # Define the video writer to save annotated video
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for the output video
+    out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
 
-        # Extract features using the modified extract_feature_single_image function
-        features = extract_feature_single_image(reid_model, person_crop, opt)
+    # Initialize the SORT tracker
+    tracker = Sort()
+    frame_count = 0
+    tracked_embeddings = {}
 
-        # Perform comparison with gallery embeddings or other operations
-        best_match_name = find_closest_match(features, gallery_embeddings,threshold=0.5)
+    while frame_count < frames_to_process:
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-        # Annotate the frame with the best match name if found
-        if best_match_name:
-            label = f'ID: {track_id}, Name: {best_match_name}'
-        else:
-            label = f'ID: {track_id}, Name: Unknown'
-        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
+        detections = detect_persons(frame, model)
+        detections_for_sort = np.array(detections)
+        tracked_objects = tracker.update(detections_for_sort)
 
-    # Write the annotated frame to the output video
-    out.write(frame)
+        for tracked in tracked_objects:
+            x1, y1, x2, y2, track_id = map(int, tracked)
 
-    frame_count += 1
+            person_crop = frame[y1:y2, x1:x2]
+            if track_id not in tracked_embeddings:
+                features = extract_feature_single_image(reid_model, person_crop, opt)
+                tracked_embeddings[track_id] = features
+            else:
+                features = tracked_embeddings[track_id]
+            # features = torch.nn.functional.normalize(features, p=2, dim=0)
 
-# Release the video capture and writer objects
-cap.release()
-out.release()
-cv2.destroyAllWindows()
 
-print(f'{frame_count} frames processed and annotated video saved as "{output_video_path}".')
+            best_match_name = find_closest_match(features, gallery_embeddings, threshold=0.5)
+            label = best_match_name if best_match_name else "Unknown"
+
+            text_color = (255, 255, 255)
+            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, text_color, 1)
+
+        out.write(frame)
+        frame_count += 1
+
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+    print(f'{frame_count} frames processed and annotated video saved as "{output_video_path}".')
+
+def load_gallery_embeddings():
+    """Loads precomputed gallery embeddings from the .pth file. If none are found, recomputes them."""
+    if os.path.exists(embeddings_file):
+        gallery_embeddings = torch.load(embeddings_file)
+        print(f"Loaded {len(gallery_embeddings)} gallery embeddings from {embeddings_file}.")
+        return gallery_embeddings  # Load names if embeddings exist
+    else:
+        print("No precomputed embeddings found. Recomputing gallery embeddings.")
+        return None # Return None for both if no embeddings are found
+def main():
+    model = load_yolov5()
+    reid_model_structure = ft_net_dense(opt.nclasses, opt.droprate, opt.stride)
+    reid_model = load_network(reid_model_structure)
+    reid_model.eval()
+
+  
+
+    # Load or precompute gallery embeddings based on the flag
+    loaded_gallery_embeddings = load_gallery_embeddings()
+
+    if loaded_gallery_embeddings is None:
+        # No precomputed embeddings found; recompute and save them
+        gallery_embeddings = precompute_gallery_embeddings(gallery_folder, reid_model)
+    else:     
+        # If embeddings are loaded, use loaded names and create a dictionary for embeddings
+        
+        gallery_embeddings = loaded_gallery_embeddings  # Assign loaded embeddings to gallery_embeddings
+
+    # Verify if we have any valid names and embeddings
+    # if (names_before_saving and  
+    #     len(embeddings_before_saving) > 0):
+    #     verify_embeddings_and_names(names_before_saving, embeddings_before_saving, loaded_ gallery_embeddings)
+
+    # Ensure gallery_embeddings is not None before proceeding
+    if gallery_embeddings is not None:
+        process_video(video_path, output_video_path, model, reid_model, gallery_embeddings)
+    else:
+        print("Gallery embeddings could not be loaded or computed. Exiting.")
+       
+
+
+if __name__ == '__main__':
+    main()
